@@ -1,3 +1,34 @@
+const DEMO_MODE = true;
+
+const DEMO_JOBS = [
+  {
+    id: 101,
+    type: "email-send",
+    status: "COMPLETED",
+    attempts: 0,
+    max_attempts: 3,
+    payload: { to: "user@example.com" },
+  },
+  {
+    id: 102,
+    type: "image-process",
+    status: "FAILED",
+    attempts: 2,
+    max_attempts: 3,
+    payload: { image_id: "img_9821" },
+    last_error: "Worker timeout",
+  },
+  {
+    id: 103,
+    type: "report-generate",
+    status: "RUNNING",
+    attempts: 1,
+    max_attempts: 3,
+    payload: { report_id: "weekly" },
+  },
+];
+
+
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
@@ -79,16 +110,11 @@ export default function App() {
   const [query, setQuery] = useState("");
 
   async function fetchAllJobs() {
-    const statuses = ["QUEUED", "RUNNING", "COMPLETED", "FAILED"];
-    const results = await Promise.all(
-      statuses.map((s) =>
-        axios.get(`${API_URL}/jobs?status=${s}`).then((r) => r.data as Job[])
-      )
-    );
-    const merged = results.flat();
-    // newest first
-    merged.sort((a, b) => b.id - a.id);
-    setJobs(merged);
+  if (DEMO_MODE) {
+    setJobs(DEMO_JOBS);
+    return;
+  }
+  // real backend fetch stays here for later
   }
 
   async function fetchJob(id: number) {
