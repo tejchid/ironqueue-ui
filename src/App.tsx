@@ -1,38 +1,14 @@
-const DEMO_MODE = true;
-
-const DEMO_JOBS = [
-  {
-    id: 101,
-    type: "email-send",
-    status: "COMPLETED",
-    attempts: 0,
-    max_attempts: 3,
-    payload: { to: "user@example.com" },
-  },
-  {
-    id: 102,
-    type: "image-process",
-    status: "FAILED",
-    attempts: 2,
-    max_attempts: 3,
-    payload: { image_id: "img_9821" },
-    last_error: "Worker timeout",
-  },
-  {
-    id: 103,
-    type: "report-generate",
-    status: "RUNNING",
-    attempts: 1,
-    max_attempts: 3,
-    payload: { report_id: "weekly" },
-  },
-];
-
-
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
+const DEMO_MODE = true;
 const API_URL = "/api";
+
+const DEMO_JOBS = [
+  { id: 101, type: "email-send", status: "COMPLETED", attempts: 0, max_attempts: 3, payload: { to: "user@example.com" } },
+  { id: 102, type: "image-process", status: "FAILED", attempts: 2, max_attempts: 3, payload: { image_id: "img_9821" }, last_error: "Worker timeout" },
+  { id: 103, type: "report-generate", status: "RUNNING", attempts: 1, max_attempts: 3, payload: { report_id: "weekly" } },
+];
 
 type Job = {
   id: number;
@@ -43,81 +19,82 @@ type Job = {
   payload?: any;
   last_error?: string | null;
   created_at?: string;
-  started_at?: string;
-  finished_at?: string;
 };
 
+// --- HELPER COMPONENTS ---
+
 function StatusBadge({ status }: { status: Job["status"] }) {
-  const cls =
-    status === "QUEUED"
-      ? "gray"
-      : status === "RUNNING"
-      ? "blue"
-      : status === "COMPLETED"
-      ? "green"
-      : "red";
-  return <span className={`badge ${cls}`}>{status}</span>;
+  const colors: Record<string, string> = {
+    QUEUED: "#9ca3af",
+    RUNNING: "#3b82f6",
+    COMPLETED: "#10b981",
+    FAILED: "#ef4444",
+  };
+  const color = colors[status] || "#9ca3af";
+  
+  return (
+    <span className={`badge-base ${status === 'RUNNING' ? 'pulse' : ''}`} 
+      style={{ 
+        backgroundColor: `${color}22`, 
+        color: color, 
+        border: `1px solid ${color}44`,
+        padding: '4px 10px',
+        borderRadius: '12px',
+        fontSize: '11px',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px'
+      }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color, boxShadow: `0 0 8px ${color}` }}></span>
+      {status}
+    </span>
+  );
 }
 
 function RetryDots({ attempts, max }: { attempts: number; max: number }) {
   return (
-    <div style={{ display: "flex", gap: 8 }}>
-      {Array.from({ length: max }).map((_, i) => {
-        const used = i < attempts;
-        return (
-          <div
-            key={i}
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 999,
-              background: used ? "#ef4444" : "transparent",
-              border: used ? "none" : "1px solid #4b5563",
-            }}
-          />
-        );
-      })}
+    <div style={{ display: "flex", gap: 6 }}>
+      {Array.from({ length: max }).map((_, i) => (
+        <div key={i} style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: i < attempts ? "#ef4444" : "transparent",
+          border: i < attempts ? "none" : "1px solid #374151",
+          boxShadow: i < attempts ? "0 0 8px #ef4444" : "none"
+        }} />
+      ))}
     </div>
   );
 }
 
 function PrettyJson({ value }: { value: any }) {
   return (
-    <pre
-      style={{
-        margin: 0,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
-        fontSize: 12,
-        lineHeight: 1.4,
-        padding: 12,
-        borderRadius: 12,
-        background: "#0b1220",
-        border: "1px solid #1f2937",
-      }}
-    >
+    <pre style={{
+      margin: 0, padding: 16, borderRadius: 12, background: "#06090f",
+      border: "1px solid #1f2937", color: "#60a5fa", fontSize: 12, overflow: "auto"
+    }}>
       {JSON.stringify(value, null, 2)}
     </pre>
   );
 }
 
+// --- MAIN APP ---
+
 export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Job | null>(null);
-
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
   async function fetchAllJobs() {
-  if (DEMO_MODE) {
-    setJobs(DEMO_JOBS);
-    return;
-  }
-  // real backend fetch stays here for later
+    if (DEMO_MODE) { setJobs(DEMO_JOBS); return; }
+    try { const res = await axios.get(`${API_URL}/jobs`); setJobs(res.data); } catch (e) { console.error(e); }
   }
 
   async function fetchJob(id: number) {
+    if (DEMO_MODE) { setSelected(DEMO_JOBS.find(j => j.id === id) || null); return; }
     const res = await axios.get(`${API_URL}/jobs/${id}`);
     setSelected(res.data);
   }
@@ -132,232 +109,151 @@ export default function App() {
     if (selectedId != null) fetchJob(selectedId);
   }, [selectedId]);
 
-  const counts = useMemo(
-    () => ({
-      QUEUED: jobs.filter((j) => j.status === "QUEUED").length,
-      RUNNING: jobs.filter((j) => j.status === "RUNNING").length,
-      COMPLETED: jobs.filter((j) => j.status === "COMPLETED").length,
-      FAILED: jobs.filter((j) => j.status === "FAILED").length,
-    }),
-    [jobs]
-  );
+  const counts = useMemo(() => ({
+    QUEUED: jobs.filter(j => j.status === "QUEUED").length,
+    RUNNING: jobs.filter(j => j.status === "RUNNING").length,
+    COMPLETED: jobs.filter(j => j.status === "COMPLETED").length,
+    FAILED: jobs.filter(j => j.status === "FAILED").length,
+  }), [jobs]);
 
   const filtered = useMemo(() => {
-    return jobs.filter((j) => {
+    return jobs.filter(j => {
       const okStatus = statusFilter === "ALL" ? true : j.status === statusFilter;
       const q = query.trim().toLowerCase();
-      const okQuery =
-        q.length === 0
-          ? true
-          : String(j.id).includes(q) || (j.type || "").toLowerCase().includes(q);
-      return okStatus && okQuery;
+      return okStatus && (String(j.id).includes(q) || (j.type || "").toLowerCase().includes(q));
     });
   }, [jobs, statusFilter, query]);
 
   return (
-    <div style={{ padding: 24, maxWidth: 1200, margin: "0 auto" }}>
-      <header
-        style={{
-          display: "flex",
-          alignItems: "flex-end",
-          justifyContent: "space-between",
-          marginBottom: 18,
-        }}
-      >
-        <div>
-          <h1 style={{ margin: 0 }}>IronQueue</h1>
-          <p style={{ margin: 0, color: "#9ca3af" }}>Live · updating every 3s</p>
-        </div>
+    <div style={{ backgroundColor: "#070b14", minHeight: "100vh", color: "#f3f4f6", fontFamily: "Inter, sans-serif" }}>
+      <style>{`
+        .glow-card { background: rgba(17, 25, 40, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; transition: all 0.2s ease; }
+        .glow-card:hover { border-color: rgba(255, 255, 255, 0.2); }
+        .pulse { animation: pulse-kf 2s infinite; }
+        @keyframes pulse-kf { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        table tr:hover { background: rgba(255, 255, 255, 0.02); }
+      `}</style>
 
-        <div style={{ display: "flex", gap: 10 }}>
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by id or type…"
-            style={{
-              width: 240,
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #1f2937",
-              background: "#0f1624",
-              color: "#e5e7eb",
-              outline: "none",
-            }}
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              border: "1px solid #1f2937",
-              background: "#0f1624",
-              color: "#e5e7eb",
-              outline: "none",
-            }}
-          >
-            <option value="ALL">All</option>
-            <option value="QUEUED">Queued</option>
-            <option value="RUNNING">Running</option>
-            <option value="COMPLETED">Completed</option>
-            <option value="FAILED">Failed</option>
-          </select>
-        </div>
-      </header>
-
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(4, 1fr)",
-          gap: 16,
-          marginBottom: 18,
-        }}
-      >
-        {Object.entries(counts).map(([k, v]) => (
-          <div key={k} className="card">
-            <div style={{ fontSize: 30, fontWeight: 650 }}>{v}</div>
-            <div style={{ color: "#9ca3af", letterSpacing: 0.4 }}>{k}</div>
+      <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto" }}>
+        
+        {/* HEADER */}
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+          <div>
+            <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-1px" }}>IronQueue</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span className="pulse" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10b981", boxShadow: "0 0 10px #10b981" }}></span>
+              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · Updates 3s</p>
+            </div>
           </div>
-        ))}
-      </div>
 
-      <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-        <div style={{ padding: 16, color: "#9ca3af", fontSize: 12 }}>
-          Click a job to view details
+          <div style={{ display: "flex", gap: 12 }}>
+            <input 
+              className="glow-card" 
+              style={{ padding: "12px 20px", width: 260, color: "white", outline: "none" }} 
+              placeholder="Search by ID or Type..." 
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button style={{ backgroundColor: "#3b82f6", color: "white", padding: "0 24px", borderRadius: "12px", border: "none", fontWeight: 600, cursor: "pointer" }}>
+              Submit New Job
+            </button>
+          </div>
+        </header>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
+          
+          {/* MAIN PANEL */}
+          <main>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+              {[
+                { label: "Queued", val: counts.QUEUED, color: "#9ca3af" },
+                { label: "Running", val: counts.RUNNING, color: "#3b82f6" },
+                { label: "Completed", val: counts.COMPLETED, color: "#10b981" },
+                { label: "Failed", val: counts.FAILED, color: "#ef4444" }
+              ].map(stat => (
+                <div key={stat.label} className="glow-card" style={{ padding: 20, borderLeft: `4px solid ${stat.color}` }}>
+                  <div style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>{stat.label}</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, marginTop: 4 }}>{stat.val}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glow-card" style={{ overflow: "hidden" }}>
+              <table width="100%" style={{ borderCollapse: "collapse", textAlign: "left" }}>
+                <thead style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af", fontSize: 12 }}>
+                  <tr>
+                    <th style={{ padding: 18 }}>JOB ID</th>
+                    <th>TYPE</th>
+                    <th>STATUS</th>
+                    <th>RETRIES</th>
+                    <th style={{ paddingRight: 18 }}>MAX</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map(job => (
+                    <tr key={job.id} onClick={() => setSelectedId(job.id)} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
+                      <td style={{ padding: 18, fontWeight: 700 }}>#{job.id}</td>
+                      <td><code style={{ background: "#1e293b", padding: "3px 8px", borderRadius: 6, fontSize: 13 }}>{job.type}</code></td>
+                      <td><StatusBadge status={job.status} /></td>
+                      <td><RetryDots attempts={job.attempts} max={job.max_attempts} /></td>
+                      <td style={{ paddingRight: 18, color: "#9ca3af" }}>{job.max_attempts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </main>
+
+          {/* ACTIVITY SIDEBAR */}
+          <aside className="glow-card" style={{ padding: 20, height: "fit-content" }}>
+            <h3 style={{ margin: "0 0 20px 0", fontSize: 16, fontWeight: 700 }}>Job Activity Stream</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {jobs.map(job => (
+                <div key={job.id} style={{ display: "flex", gap: 14 }}>
+                  <div style={{ 
+                    width: 32, height: 32, borderRadius: "10px", 
+                    backgroundColor: job.status === 'COMPLETED' ? "#10b98122" : job.status === 'FAILED' ? "#ef444422" : "#3b82f622",
+                    display: "flex", alignItems: "center", justifyContent: "center", color: job.status === 'COMPLETED' ? "#10b981" : job.status === 'FAILED' ? "#ef4444" : "#3b82f6"
+                  }}>
+                    {job.status === 'COMPLETED' ? '✓' : job.status === 'FAILED' ? '!' : '→'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Job #{job.id} {job.status.toLowerCase()}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af" }}>Module: {job.type}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
-
-        <table width="100%" cellPadding={12} style={{ borderCollapse: "collapse" }}>
-          <thead style={{ color: "#9ca3af", textAlign: "left" }}>
-            <tr>
-              <th style={{ paddingLeft: 16 }}>ID</th>
-              <th>Type</th>
-              <th>Status</th>
-              <th>Retries</th>
-              <th style={{ paddingRight: 16 }}>Max</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} style={{ padding: 16, color: "#9ca3af" }}>
-                  No jobs match your filters.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((job) => (
-                <tr
-                  key={job.id}
-                  onClick={() => setSelectedId(job.id)}
-                  style={{
-                    cursor: "pointer",
-                    borderTop: "1px solid #0b1220",
-                    background:
-                      selectedId === job.id ? "rgba(59,130,246,0.08)" : "transparent",
-                  }}
-                >
-                  <td style={{ paddingLeft: 16 }}>{job.id}</td>
-                  <td>{job.type}</td>
-                  <td>
-                    <StatusBadge status={job.status} />
-                  </td>
-                  <td>
-                    <RetryDots attempts={job.attempts} max={job.max_attempts} />
-                  </td>
-                  <td style={{ paddingRight: 16 }}>{job.max_attempts}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
       </div>
 
-      {/* Drawer */}
-      {selectedId != null && (
-        <div
-          onClick={() => {
-            setSelectedId(null);
-            setSelected(null);
-          }}
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(0,0,0,0.45)",
-            display: "flex",
-            justifyContent: "flex-end",
-          }}
-        >
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 520,
-              height: "100%",
-              background: "#0f1624",
-              borderLeft: "1px solid #1f2937",
-              padding: 18,
-              boxShadow: "0 20px 60px rgba(0,0,0,0.6)",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between" }}>
+      {/* DRAWER MODAL */}
+      {selectedId && (
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 32, boxShadow: "-10px 0 30px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
-                <div style={{ fontSize: 12, color: "#9ca3af" }}>Job</div>
-                <div style={{ fontSize: 22, fontWeight: 700 }}>
-                  #{selectedId}
-                </div>
+                <h2 style={{ margin: 0 }}>Job Detail #{selectedId}</h2>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0" }}>Internal System Trace</p>
               </div>
-              <button
-                onClick={() => {
-                  setSelectedId(null);
-                  setSelected(null);
-                }}
-              >
-                Close
-              </button>
+              <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "1px solid #334155", color: "white", padding: "6px 12px", borderRadius: 8, cursor: "pointer" }}>Close</button>
+            </div>
+            
+            <div style={{ marginTop: 32, display: "flex", gap: 12 }}>
+              {selected ? <StatusBadge status={selected.status} /> : <span>Loading...</span>}
             </div>
 
-            <div style={{ marginTop: 14, display: "flex", gap: 10, alignItems: "center" }}>
-              {selected ? (
-                <>
-                  <StatusBadge status={selected.status} />
-                  <span style={{ color: "#9ca3af" }}>
-                    {selected.type} · attempts {selected.attempts}/{selected.max_attempts}
-                  </span>
-                </>
-              ) : (
-                <span style={{ color: "#9ca3af" }}>Loading…</span>
-              )}
+            <div style={{ marginTop: 24 }}>
+              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Data Payload</label>
+              <div style={{ marginTop: 10 }}><PrettyJson value={selected?.payload ?? {}} /></div>
             </div>
 
-            <div style={{ marginTop: 16 }}>
-              <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
-                Payload
+            {selected?.last_error && (
+              <div style={{ marginTop: 24 }}>
+                <label style={{ color: "#ef4444", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Error Log</label>
+                <div style={{ marginTop: 10, padding: 16, borderRadius: 12, background: "#7f1d1d22", border: "1px solid #ef444444", color: "#fca5a5", fontSize: 12 }}>{selected.last_error}</div>
               </div>
-              <PrettyJson value={selected?.payload ?? {}} />
-            </div>
-
-            {selected?.last_error ? (
-              <div style={{ marginTop: 16 }}>
-                <div style={{ color: "#9ca3af", fontSize: 12, marginBottom: 8 }}>
-                  Last error
-                </div>
-                <div
-                  style={{
-                    padding: 12,
-                    borderRadius: 12,
-                    border: "1px solid #1f2937",
-                    background: "#0b1220",
-                    color: "#fca5a5",
-                    fontSize: 12,
-                    whiteSpace: "pre-wrap",
-                  }}
-                >
-                  {selected.last_error}
-                </div>
-              </div>
-            ) : null}
-
-            <div style={{ marginTop: 16, color: "#9ca3af", fontSize: 12 }}>
-              Note: duration is shown as “—” until backend exposes timestamps in its response schema.
-            </div>
+            )}
           </div>
         </div>
       )}
