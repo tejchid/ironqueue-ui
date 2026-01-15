@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 
 const DEMO_MODE = true;
@@ -30,13 +30,11 @@ export default function App() {
   const [newType, setNewType] = useState("EMAIL_DISPATCH_SERVICE");
   const [metrics, setMetrics] = useState({ cpu: 42, latency: 12 });
 
-  // Infrastructure Telemetry
   useEffect(() => {
     const t = setInterval(() => setMetrics({ cpu: Math.floor(Math.random() * 15) + 30, latency: Math.floor(Math.random() * 5) + 10 }), 2500);
     return () => clearInterval(t);
   }, []);
 
-  // Polling logic: Disabled in Demo Mode so manual additions stay put
   useEffect(() => {
     if (DEMO_MODE) return;
     const interval = setInterval(async () => {
@@ -51,7 +49,8 @@ export default function App() {
       type: newType,
       status: "QUEUED",
       attempts: 0,
-      max_attempts: 3
+      max_attempts: 3,
+      payload: { source: "Manual_Dispatch", cluster: "us-west-2" }
     };
     setJobs(prev => [newJob, ...prev]);
     setIsAdding(false);
@@ -71,7 +70,6 @@ export default function App() {
 
       <div style={{ maxWidth: 1400, margin: "0 auto" }}>
         
-        {/* TELEMETRY HEADER */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 40, borderBottom: "1px solid #30363d", paddingBottom: 24 }}>
           <div>
             <h1 style={{ fontSize: 28, fontWeight: 800, margin: 0 }}>IRON_QUEUE <span style={{ color: "#3b82f6", fontSize: 14 }}>SYSTEM_OS</span></h1>
@@ -84,9 +82,8 @@ export default function App() {
           </div>
         </header>
 
-        {/* CONTROLS */}
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 24 }}>
-           <input className="glow-card" style={{ padding: "10px 16px", width: 300, background: "#0d1117", border: "1px solid #30363d", color: "#c9d1d9", outline: "none" }} placeholder="Filter by Process ID..." onChange={e => setQuery(e.target.value)} />
+           <input className="glow-card" style={{ padding: "10px 16px", width: 300, background: "#0d1117", border: "1px solid #30363d", color: "#c9d1d9", outline: "none" }} placeholder="Filter by Process ID..." value={query} onChange={e => setQuery(e.target.value)} />
            <button onClick={() => setIsAdding(!isAdding)} style={{ background: "#238636", color: "white", padding: "0 24px", borderRadius: "8px", border: "none", fontWeight: 700, cursor: "pointer" }}>
               {isAdding ? "ABORT" : "DISPATCH NEW TASK"}
            </button>
@@ -126,7 +123,7 @@ export default function App() {
 
           <aside style={{ display: "flex", flexDirection: "column", gap: 24 }}>
             <div className="glow-card">
-              <h3 style={{ margin: "0 0 16px 0", fontSize: 14 }}>Worker Pool Health</h3>
+              <h3 style={{ margin: "0 0 16px 0", fontSize: 14 }}>Worker Pool</h3>
               {['Worker-01', 'Worker-02', 'Worker-03'].map((w, i) => (
                 <div key={w} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, padding: '10px', background: '#010409', borderRadius: '6px', marginBottom: 8, border: '1px solid #30363d' }}>
                   <span style={{ color: '#8b949e' }}>{w}</span>
@@ -137,6 +134,21 @@ export default function App() {
           </aside>
         </div>
       </div>
+
+      {/* Trace Log Modal (Re-Integrated to use selectedId) */}
+      {selectedId && (
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(1, 4, 9, 0.8)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0d1117", borderLeft: "1px solid #30363d", padding: 40 }}>
+            <h2 style={{ fontSize: 20 }}>TASK_TRACE_LOG [0x{selectedId.toString(16).toUpperCase()}]</h2>
+            <div style={{ marginTop: 32, padding: 20, background: "#010409", borderRadius: 12, border: "1px solid #30363d", color: "#79c0ff", fontSize: 12, fontFamily: "monospace" }}>
+               PERSISTENCE: POSTGRESQL_DB<br/>
+               BROKER: REDIS_6.2<br/>
+               LATENCY: 14ms
+            </div>
+            <button onClick={() => setSelectedId(null)} style={{ marginTop: 40, width: "100%", background: "#21262d", border: "1px solid #30363d", color: "white", padding: "12px", borderRadius: "8px", cursor: "pointer", fontWeight: 700 }}>CLOSE_TRACE</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
