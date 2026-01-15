@@ -85,7 +85,7 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Job | null>(null);
-  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  _const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
   async function fetchAllJobs() {
