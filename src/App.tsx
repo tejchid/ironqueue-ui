@@ -85,7 +85,6 @@ export default function App() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Job | null>(null);
-  _const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [query, setQuery] = useState("");
 
   async function fetchAllJobs() {
@@ -95,8 +94,7 @@ export default function App() {
 
   async function fetchJob(id: number) {
     if (DEMO_MODE) { setSelected(DEMO_JOBS.find(j => j.id === id) || null); return; }
-    const res = await axios.get(`${API_URL}/jobs/${id}`);
-    setSelected(res.data);
+    try { const res = await axios.get(`${API_URL}/jobs/${id}`); setSelected(res.data); } catch (e) { console.error(e); }
   }
 
   useEffect(() => {
@@ -118,11 +116,10 @@ export default function App() {
 
   const filtered = useMemo(() => {
     return jobs.filter(j => {
-      const okStatus = statusFilter === "ALL" ? true : j.status === statusFilter;
       const q = query.trim().toLowerCase();
-      return okStatus && (String(j.id).includes(q) || (j.type || "").toLowerCase().includes(q));
+      return q.length === 0 ? true : (String(j.id).includes(q) || (j.type || "").toLowerCase().includes(q));
     });
-  }, [jobs, statusFilter, query]);
+  }, [jobs, query]);
 
   return (
     <div style={{ backgroundColor: "#070b14", minHeight: "100vh", color: "#f3f4f6", fontFamily: "Inter, sans-serif" }}>
@@ -149,8 +146,9 @@ export default function App() {
           <div style={{ display: "flex", gap: 12 }}>
             <input 
               className="glow-card" 
-              style={{ padding: "12px 20px", width: 260, color: "white", outline: "none" }} 
+              style={{ padding: "12px 20px", width: 260, color: "white", outline: "none", background: "rgba(15, 22, 36, 0.6)" }} 
               placeholder="Search by ID or Type..." 
+              value={query}
               onChange={(e) => setQuery(e.target.value)}
             />
             <button style={{ backgroundColor: "#3b82f6", color: "white", padding: "0 24px", borderRadius: "12px", border: "none", fontWeight: 600, cursor: "pointer" }}>
@@ -171,7 +169,7 @@ export default function App() {
                 { label: "Failed", val: counts.FAILED, color: "#ef4444" }
               ].map(stat => (
                 <div key={stat.label} className="glow-card" style={{ padding: 20, borderLeft: `4px solid ${stat.color}` }}>
-                  <div style={{ color: "#9ca3af", fontSize: 12, fontWeight: 700, textTransform: "uppercase" }}>{stat.label}</div>
+                  <div style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{stat.label}</div>
                   <div style={{ fontSize: 32, fontWeight: 700, marginTop: 4 }}>{stat.val}</div>
                 </div>
               ))}
@@ -189,7 +187,9 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(job => (
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: 18, color: "#9ca3af", textAlign: "center" }}>No records found.</td></tr>
+                  ) : filtered.map(job => (
                     <tr key={job.id} onClick={() => setSelectedId(job.id)} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
                       <td style={{ padding: 18, fontWeight: 700 }}>#{job.id}</td>
                       <td><code style={{ background: "#1e293b", padding: "3px 8px", borderRadius: 6, fontSize: 13 }}>{job.type}</code></td>
