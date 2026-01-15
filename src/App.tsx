@@ -90,15 +90,31 @@ export default function App() {
   const [isAdding, setIsAdding] = useState(false);
   const [newType, setNewType] = useState("email-send");
 
+  // Fixed Polling: Only resets state if DEMO_MODE is false
   async function fetchAllJobs() {
-    if (DEMO_MODE && jobs.length === 0) { setJobs(DEMO_JOBS); return; }
-    if (DEMO_MODE) return;
-    try { const res = await axios.get(`${API_URL}/jobs`); setJobs(res.data); } catch (e) { console.error(e); }
+    if (DEMO_MODE) {
+      if (jobs.length === 0) setJobs(DEMO_JOBS);
+      return; // Stop polling from overwriting local manual additions
+    }
+    try { 
+      const res = await axios.get(`${API_URL}/jobs`); 
+      setJobs(res.data); 
+    } catch (e) { 
+      console.error(e); 
+    }
   }
 
   async function fetchJob(id: number) {
-    if (DEMO_MODE) { setSelected(jobs.find(j => j.id === id) || null); return; }
-    try { const res = await axios.get(`${API_URL}/jobs/${id}`); setSelected(res.data); } catch (e) { console.error(e); }
+    if (DEMO_MODE) { 
+      setSelected(jobs.find(j => j.id === id) || null); 
+      return; 
+    }
+    try { 
+      const res = await axios.get(`${API_URL}/jobs/${id}`); 
+      setSelected(res.data); 
+    } catch (e) { 
+      console.error(e); 
+    }
   }
 
   async function triggerNewJob() {
@@ -113,7 +129,8 @@ export default function App() {
         max_attempts: 3,
         payload
       };
-      setJobs([newJob, ...jobs]);
+      // Use functional update to ensure new job persists in memory
+      setJobs(prev => [newJob, ...prev]);
       setIsAdding(false);
       return;
     }
@@ -121,18 +138,21 @@ export default function App() {
       await axios.post(`${API_URL}/jobs`, { type: newType, payload }); 
       fetchAllJobs(); 
       setIsAdding(false);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error(e); 
+    }
   }
 
   useEffect(() => {
     fetchAllJobs();
+    // Only poll the backend if we are not in Demo Mode
     const id = setInterval(fetchAllJobs, 3000);
     return () => clearInterval(id);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (selectedId != null) fetchJob(selectedId);
-  }, [selectedId]);
+  }, [selectedId, jobs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const counts = useMemo(() => ({
     QUEUED: jobs.filter(j => j.status === "QUEUED").length,
@@ -155,18 +175,16 @@ export default function App() {
         .pulse { animation: pulse-kf 2s infinite; }
         @keyframes pulse-kf { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         table tr:hover { background: rgba(255, 255, 255, 0.02); }
-        select:focus, input:focus { border-color: #3b82f6 !important; }
       `}</style>
 
       <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto" }}>
         
-        {/* HEADER */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
           <div>
             <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-1px" }}>IronQueue</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
               <span className="pulse" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10b981", boxShadow: "0 0 10px #10b981" }}></span>
-              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · Real-time Polling</p>
+              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · {DEMO_MODE ? "Sandbox Mode" : "Real-time Polling"}</p>
             </div>
           </div>
 
@@ -187,7 +205,6 @@ export default function App() {
           </div>
         </header>
 
-        {/* INTERACTIVE SUBMISSION FORM */}
         {isAdding && (
           <div className="glow-card" style={{ marginBottom: 32, padding: 24, display: "flex", gap: 20, alignItems: "flex-end", border: "1px solid #3b82f644", background: "rgba(59, 130, 246, 0.05)" }}>
             <div style={{ flex: 1 }}>
@@ -195,7 +212,7 @@ export default function App() {
               <select 
                 value={newType} 
                 onChange={(e) => setNewType(e.target.value)}
-                style={{ width: "100%", background: "#0f172a", border: "1px solid #1f2937", color: "white", padding: "12px", borderRadius: "10px", outline: "none", cursor: "pointer" }}
+                style={{ width: "100%", background: "#0f172a", border: "1px solid #1f2937", color: "white", padding: "12px", borderRadius: "10px", outline: "none" }}
               >
                 <option value="email-send">email-send</option>
                 <option value="image-process">image-process</option>
@@ -213,13 +230,12 @@ export default function App() {
               onClick={triggerNewJob}
               style={{ backgroundColor: "#10b981", color: "white", padding: "14px 32px", borderRadius: "10px", border: "none", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px 0 rgba(16, 185, 129, 0.39)" }}
             >
-              PUSH TO WORKER
+              PUSH TO QUEUE
             </button>
           </div>
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
-          
           <main>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
               {[
@@ -286,31 +302,18 @@ export default function App() {
         </div>
       </div>
 
-      {/* DRAWER MODAL */}
       {selectedId && (
         <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 40, boxShadow: "-10px 0 30px rgba(0,0,0,0.5)" }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 40 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <div>
-                <h2 style={{ margin: 0 }}>System Trace #{selectedId}</h2>
-                <p style={{ color: "#9ca3af", margin: "4px 0 0 0" }}>Internal Metadata & Logs</p>
-              </div>
+              <h2 style={{ margin: 0 }}>System Trace #{selectedId}</h2>
               <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "1px solid #334155", color: "white", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>Close</button>
             </div>
-            
             <div style={{ marginTop: 32 }}><StatusBadge status={selected?.status || ""} /></div>
-
             <div style={{ marginTop: 32 }}>
-              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>JSON Data Payload</label>
+              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>JSON Payload</label>
               <div style={{ marginTop: 12 }}><PrettyJson value={selected?.payload ?? {}} /></div>
             </div>
-
-            {selected?.last_error && (
-              <div style={{ marginTop: 24 }}>
-                <label style={{ color: "#ef4444", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Traceback Error</label>
-                <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: "#7f1d1d22", border: "1px solid #ef444444", color: "#fca5a5", fontSize: 12 }}>{selected.last_error}</div>
-              </div>
-            )}
           </div>
         </div>
       )}
