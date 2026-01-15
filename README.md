@@ -1,73 +1,37 @@
-# React + TypeScript + Vite
+# IronQueue: Full-Stack Job Scheduler 🚀
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+**A distributed task management platform with real-time monitoring and persistent state.**
 
-Currently, two official plugins are available:
+**[Live Demo](https://ironqueue.vercel.app/)**
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+### **Overview**
 
-## React Compiler
+This repository contains the **Next.js/React** frontend for the IronQueue ecosystem. It acts as the central command center for a distributed system, allowing users to submit, monitor, and manage asynchronous task workflows across a cluster of Python workers.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### **The Full-Stack Architecture**
 
-## Expanding the ESLint configuration
+* **Frontend:** React, TypeScript, and Vite for a reactive, type-safe monitoring dashboard.
+* **API Layer:** FastAPI (Python) managing job orchestration and client communication.
+* **Message Broker:** Redis for high-speed task queuing and worker distribution.
+* **Persistence:** PostgreSQL for reliable job history and metadata storage.
+* **Infrastructure:** Fully containerized with Docker for seamless local development and scaling.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### **Core Features**
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+* **End-to-End Orchestration:** Submit complex JSON payloads through the UI and watch them move through the Redis queue to worker execution in real-time.
+* **System Observability:** Visual state-machine that tracks jobs through their entire lifecycle (Pending → Processing → Completed/Failed).
+* **Fault Tolerance:** Designed to interact with a "Reaper" service that handles orphaned tasks, with all status updates reflected instantly on the dashboard.
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+### **Quick Start**
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# Clone the frontend
+git clone https://github.com/tejchid/ironqueue-ui
+
+# Install and run
+npm install
+npm run dev
+
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+*Note: This frontend requires the [IronQueue Backend](https://github.com/tejchid/ironqueue) to be running to fetch data.*
