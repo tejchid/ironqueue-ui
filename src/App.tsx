@@ -1,76 +1,146 @@
 import { useEffect, useState } from "react";
 
-// --- TERMINAL THEME ---
+const DEMO_MODE = true;
+
+const INITIAL_JOBS = [
+  { id: 255, type: "KAFKA_INGEST_PROC", status: "RUNNING" },
+  { id: 128, type: "REDIS_CACHE_PURGE", status: "COMPLETED" },
+  { id: 64,  type: "IMAGE_RESIZE_WORKER", status: "FAILED" },
+];
+
 export default function App() {
-  const [jobs, setJobs] = useState([...]); 
-  
+  const [jobs, setJobs] = useState(INITIAL_JOBS);
+  const [query, setQuery] = useState("");
+  const [isAdding, setIsAdding] = useState(false);
+  const [metrics, setMetrics] = useState({ cpu: "24.2", mem: "1.2GB" });
+
+  // Infrastructure Telemetry Effect
+  useEffect(() => {
+    const t = setInterval(() => {
+      setMetrics({
+        cpu: (Math.random() * 10 + 20).toFixed(1),
+        mem: (Math.random() * 0.5 + 1.0).toFixed(1) + "GB"
+      });
+    }, 2000);
+    return () => clearInterval(t);
+  }, []);
+
+  const dispatchTask = () => {
+    const newTask = {
+      id: Math.floor(Math.random() * 500),
+      type: "MANUAL_DISPATCH_TASK",
+      status: "QUEUED"
+    };
+    setJobs(prev => [newTask, ...prev]);
+    setIsAdding(false);
+  };
+
+  const filtered = jobs.filter(j => 
+    query === "" || j.type.toLowerCase().includes(query.toLowerCase()) || String(j.id).includes(query)
+  );
+
   return (
     <div style={{ 
-      backgroundColor: "#0a0a0a", 
-      color: "#00ff41", // Matrix/Terminal Green
+      backgroundColor: "#050505", 
+      color: "#00ff41", 
       fontFamily: "'JetBrains Mono', monospace", 
-      minHeight: "100vh",
-      padding: "20px",
-      border: "10px solid #1a1a1a" // "Monitor" frame
+      minHeight: "100vh", 
+      padding: "30px",
+      letterSpacing: "0.5px"
     }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        .term-border { border: 1px solid #00ff41; padding: 15px; margin-bottom: 20px; box-shadow: inset 0 0 10px #00ff4133; }
-        .cursor { display: inline-block; width: 10px; height: 18px; background: #00ff41; animation: blink 1s infinite; vertical-align: middle; }
-        @keyframes blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+        .terminal-window { border: 1px solid #00ff41; padding: 20px; background: rgba(0, 255, 65, 0.02); margin-bottom: 20px; position: relative; }
+        .terminal-window::before { content: "SYS_MONITOR_v1.0"; position: absolute; top: -10px; left: 20px; background: #050505; padding: 0 10px; font-size: 10px; }
+        .blink { animation: blink-kf 1s infinite; }
+        @keyframes blink-kf { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th { text-align: left; border-bottom: 1px solid #00ff41; padding: 10px; font-size: 12px; }
+        td { padding: 12px 10px; font-size: 13px; border-bottom: 1px solid #00ff4111; }
+        input, select { background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 8px; font-family: inherit; outline: none; }
+        button { background: #00ff41; color: #050505; border: none; padding: 10px 20px; font-family: inherit; font-weight: bold; cursor: pointer; }
+        button:hover { background: #00cc33; }
       `}</style>
 
-      {/* SYSTEM HEADER */}
-      <div className="term-border" style={{ display: 'flex', justifyContent: 'space-between' }}>
+      {/* HEADER SECTION */}
+      <div className="terminal-window" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-          <div style={{ fontWeight: 800 }}>[ SYSTEM ]: IRON_QUEUE_V2</div>
-          <div style={{ fontSize: 12 }}>ID: SJSU_CE_NODE_01</div>
+          <h1 style={{ margin: 0, fontSize: "24px" }}>&gt; IRON_QUEUE_OS</h1>
+          <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>DISTRIBUTED_NODE_STATION // {DEMO_MODE ? "SANDBOX_ACTIVE" : "PROD_ACTIVE"}</p>
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <div>CPU_LOAD: 24.8%</div>
-          <div>NET_LATENCY: 0.04ms</div>
+        <div style={{ textAlign: 'right', fontSize: "14px" }}>
+          <div>CPU_USAGE: {metrics.cpu}%</div>
+          <div>MEM_ALLOC: {metrics.mem}</div>
+          <div>NET_STATUS: <span className="blink">ONLINE</span></div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: '20px' }}>
-        
-        {/* COMMAND TABLE */}
-        <div>
-          <div className="term-border" style={{ padding: 0 }}>
-            <table width="100%" style={{ borderCollapse: 'collapse' }}>
-              <thead style={{ background: '#00ff41', color: '#0a0a0a' }}>
-                <tr>
-                  <th style={{ padding: '8px' }}>HEX_ID</th>
-                  <th>MODULE</th>
-                  <th>STATUS</th>
-                  <th>OP_CODE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {jobs.map(j => (
-                  <tr key={j.id} style={{ borderBottom: '1px solid #00ff4122' }}>
-                    <td style={{ padding: '12px' }}>0x{j.id.toString(16).toUpperCase()}</td>
-                    <td>{j.type}</td>
-                    <td>[{j.status}]</td>
-                    <td><button style={{ background: 'none', border: '1px solid #00ff41', color: '#00ff41', cursor: 'pointer', fontSize: '10px' }}>KILL_PROC</button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {/* ACTION BAR */}
+      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
+        <input 
+          style={{ flex: 1 }} 
+          placeholder="ENTER_FILTER_CRITERIA..." 
+          value={query} 
+          onChange={e => setQuery(e.target.value)} 
+        />
+        <button onClick={() => setIsAdding(!isAdding)}>
+          {isAdding ? "CANCEL_OP" : "DISPATCH_NEW_TASK"}
+        </button>
+      </div>
+
+      {/* NEW TASK FORM */}
+      {isAdding && (
+        <div className="terminal-window" style={{ borderStyle: 'dashed' }}>
+          <p style={{ margin: "0 0 15px 0" }}>// INITIALIZING NEW TASK SEQUENCE...</p>
+          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+            <span style={{ fontSize: "12px" }}>SELECT_MODULE:</span>
+            <select style={{ width: '250px' }}>
+              <option>KAFKA_STREAM_PROC</option>
+              <option>REDIS_FLUSH_NODE</option>
+              <option>WORKER_CLEANUP_DAEMON</option>
+            </select>
+            <button style={{ padding: '5px 15px' }} onClick={dispatchTask}>EXECUTE_PUSH</button>
           </div>
         </div>
+      )}
 
-        {/* WORKER LOGS */}
-        <aside>
-          <div className="term-border" style={{ height: '400px', fontSize: '12px', overflow: 'hidden' }}>
-            <div style={{ marginBottom: '10px', color: '#888' }}>-- WORKER_DAEMON_LOG --</div>
-            <div>[04:22] Initializing Redis...</div>
-            <div>[04:22] Connection established.</div>
-            <div>[04:23] Worker_01: Waiting for task...</div>
-            <div style={{ marginTop: '20px' }}>&gt; _ <span className="cursor"></span></div>
+      {/* MAIN DATA GRID */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '25px' }}>
+        <div className="terminal-window" style={{ padding: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>HEX_ADDRESS</th>
+                <th>PROCESS_MODULE</th>
+                <th>LOG_STATUS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(j => (
+                <tr key={j.id}>
+                  <td style={{ color: "#00ff41", fontWeight: "bold" }}>0x{j.id.toString(16).toUpperCase()}</td>
+                  <td>{j.type}</td>
+                  <td style={{ color: j.status === "FAILED" ? "#ff3e3e" : j.status === "RUNNING" ? "#3b82f6" : "#00ff41" }}>
+                    [{j.status}]
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* SYSTEM LOG SIDEBAR */}
+        <div className="terminal-window">
+          <p style={{ margin: "0 0 15px 0", fontSize: "12px", borderBottom: "1px solid #00ff41", paddingBottom: "5px" }}>SYSTEM_DAEMON_LOG</p>
+          <div style={{ fontSize: "11px", lineHeight: "1.8", color: "rgba(0, 255, 65, 0.7)" }}>
+            [08:42:01] Initializing cluster...<br/>
+            [08:42:05] Redis handshake successful.<br/>
+            [08:43:10] WorkerPool-01 established.<br/>
+            [08:43:12] Heartbeat check: OK.<br/>
+            [08:44:00] Awaiting instruction...<br/>
+            <span style={{ color: "#00ff41" }}>&gt; _ <span className="blink"></span></span>
           </div>
-        </aside>
-
+        </div>
       </div>
     </div>
   );
