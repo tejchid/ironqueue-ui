@@ -85,6 +85,10 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<Job | null>(null);
   const [query, setQuery] = useState("");
+  
+  // Submission State
+  const [isAdding, setIsAdding] = useState(false);
+  const [newType, setNewType] = useState("email-send");
 
   async function fetchAllJobs() {
     if (DEMO_MODE && jobs.length === 0) { setJobs(DEMO_JOBS); return; }
@@ -98,19 +102,26 @@ export default function App() {
   }
 
   async function triggerNewJob() {
+    const payload = { source: "UI_Manual", priority: "high", timestamp: new Date().toISOString() };
+    
     if (DEMO_MODE) {
       const newJob: Job = {
-        id: Math.floor(Math.random() * 1000),
-        type: "manual-trigger",
-        status: "RUNNING",
+        id: Math.floor(Math.random() * 899) + 100,
+        type: newType,
+        status: "QUEUED",
         attempts: 0,
         max_attempts: 3,
-        payload: { source: "UI_Trigger", timestamp: new Date().toISOString() }
+        payload
       };
       setJobs([newJob, ...jobs]);
+      setIsAdding(false);
       return;
     }
-    try { await axios.post(`${API_URL}/jobs`, { type: "manual-trigger", payload: { source: "UI" } }); fetchAllJobs(); } catch (e) { console.error(e); }
+    try { 
+      await axios.post(`${API_URL}/jobs`, { type: newType, payload }); 
+      fetchAllJobs(); 
+      setIsAdding(false);
+    } catch (e) { console.error(e); }
   }
 
   useEffect(() => {
@@ -144,16 +155,18 @@ export default function App() {
         .pulse { animation: pulse-kf 2s infinite; }
         @keyframes pulse-kf { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
         table tr:hover { background: rgba(255, 255, 255, 0.02); }
+        select:focus, input:focus { border-color: #3b82f6 !important; }
       `}</style>
 
       <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto" }}>
         
+        {/* HEADER */}
         <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
           <div>
             <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-1px" }}>IronQueue</h1>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
               <span className="pulse" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10b981", boxShadow: "0 0 10px #10b981" }}></span>
-              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · Updates 3s</p>
+              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · Real-time Polling</p>
             </div>
           </div>
 
@@ -166,17 +179,47 @@ export default function App() {
               onChange={(e) => setQuery(e.target.value)}
             />
             <button 
-              onClick={triggerNewJob}
-              style={{ backgroundColor: "#3b82f6", color: "white", padding: "0 24px", borderRadius: "12px", border: "none", fontWeight: 600, cursor: "pointer", transition: "transform 0.1s" }}
-              onMouseDown={(e) => e.currentTarget.style.transform = "scale(0.95)"}
-              onMouseUp={(e) => e.currentTarget.style.transform = "scale(1)"}
+              onClick={() => setIsAdding(!isAdding)}
+              style={{ backgroundColor: isAdding ? "#374151" : "#3b82f6", color: "white", padding: "0 24px", borderRadius: "12px", border: "none", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
             >
-              Trigger New Job
+              {isAdding ? "Cancel" : "Submit New Job"}
             </button>
           </div>
         </header>
 
+        {/* INTERACTIVE SUBMISSION FORM */}
+        {isAdding && (
+          <div className="glow-card" style={{ marginBottom: 32, padding: 24, display: "flex", gap: 20, alignItems: "flex-end", border: "1px solid #3b82f644", background: "rgba(59, 130, 246, 0.05)" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Select Task Module</label>
+              <select 
+                value={newType} 
+                onChange={(e) => setNewType(e.target.value)}
+                style={{ width: "100%", background: "#0f172a", border: "1px solid #1f2937", color: "white", padding: "12px", borderRadius: "10px", outline: "none", cursor: "pointer" }}
+              >
+                <option value="email-send">email-send</option>
+                <option value="image-process">image-process</option>
+                <option value="report-generate">report-generate</option>
+                <option value="db-backup">db-backup</option>
+              </select>
+            </div>
+            <div style={{ flex: 2 }}>
+              <label style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Static Payload Configuration</label>
+              <div style={{ background: "#06090f", padding: "12px", borderRadius: "10px", border: "1px solid #1f2937", color: "#60a5fa", fontSize: 12, fontFamily: "monospace" }}>
+                {"{ \"source\": \"UI_Control\", \"priority\": \"critical\" }"}
+              </div>
+            </div>
+            <button 
+              onClick={triggerNewJob}
+              style={{ backgroundColor: "#10b981", color: "white", padding: "14px 32px", borderRadius: "10px", border: "none", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px 0 rgba(16, 185, 129, 0.39)" }}
+            >
+              PUSH TO WORKER
+            </button>
+          </div>
+        )}
+
         <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
+          
           <main>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
               {[
@@ -204,7 +247,9 @@ export default function App() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtered.map(job => (
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: 40, color: "#9ca3af", textAlign: "center" }}>No records found in active cluster.</td></tr>
+                  ) : filtered.map(job => (
                     <tr key={job.id} onClick={() => setSelectedId(job.id)} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
                       <td style={{ padding: 18, fontWeight: 700 }}>#{job.id}</td>
                       <td><code style={{ background: "#1e293b", padding: "3px 8px", borderRadius: 6, fontSize: 13 }}>{job.type}</code></td>
@@ -219,9 +264,9 @@ export default function App() {
           </main>
 
           <aside className="glow-card" style={{ padding: 20, height: "fit-content" }}>
-            <h3 style={{ margin: "0 0 20px 0", fontSize: 16, fontWeight: 700 }}>Job Activity Stream</h3>
+            <h3 style={{ margin: "0 0 20px 0", fontSize: 16, fontWeight: 700 }}>Cluster Activity</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-              {jobs.slice(0, 8).map(job => (
+              {jobs.slice(0, 10).map(job => (
                 <div key={job.id} style={{ display: "flex", gap: 14 }}>
                   <div style={{ 
                     width: 32, height: 32, borderRadius: "10px", 
@@ -232,7 +277,7 @@ export default function App() {
                   </div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600 }}>Job #{job.id} {job.status.toLowerCase()}</div>
-                    <div style={{ fontSize: 11, color: "#9ca3af" }}>Module: {job.type}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af" }}>Type: {job.type}</div>
                   </div>
                 </div>
               ))}
@@ -241,18 +286,31 @@ export default function App() {
         </div>
       </div>
 
+      {/* DRAWER MODAL */}
       {selectedId && (
-        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 32 }}>
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 40, boxShadow: "-10px 0 30px rgba(0,0,0,0.5)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-              <h2 style={{ margin: 0 }}>Job Detail #{selectedId}</h2>
-              <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "1px solid #334155", color: "white", padding: "6px 12px", borderRadius: 8, cursor: "pointer" }}>Close</button>
+              <div>
+                <h2 style={{ margin: 0 }}>System Trace #{selectedId}</h2>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0" }}>Internal Metadata & Logs</p>
+              </div>
+              <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "1px solid #334155", color: "white", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>Close</button>
             </div>
-            <div style={{ marginTop: 24 }}><StatusBadge status={selected?.status || ""} /></div>
-            <div style={{ marginTop: 24 }}>
-              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Data Payload</label>
-              <div style={{ marginTop: 10 }}><PrettyJson value={selected?.payload ?? {}} /></div>
+            
+            <div style={{ marginTop: 32 }}><StatusBadge status={selected?.status || ""} /></div>
+
+            <div style={{ marginTop: 32 }}>
+              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>JSON Data Payload</label>
+              <div style={{ marginTop: 12 }}><PrettyJson value={selected?.payload ?? {}} /></div>
             </div>
+
+            {selected?.last_error && (
+              <div style={{ marginTop: 24 }}>
+                <label style={{ color: "#ef4444", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Traceback Error</label>
+                <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: "#7f1d1d22", border: "1px solid #ef444444", color: "#fca5a5", fontSize: 12 }}>{selected.last_error}</div>
+              </div>
+            )}
           </div>
         </div>
       )}
