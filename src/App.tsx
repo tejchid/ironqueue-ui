@@ -1,147 +1,319 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 
 const DEMO_MODE = true;
+const API_URL = "/api";
 
-const INITIAL_JOBS = [
-  { id: 255, type: "KAFKA_INGEST_PROC", status: "RUNNING" },
-  { id: 128, type: "REDIS_CACHE_PURGE", status: "COMPLETED" },
-  { id: 64,  type: "IMAGE_RESIZE_WORKER", status: "FAILED" },
+const DEMO_JOBS = [
+  { id: 101, type: "email-send", status: "COMPLETED", attempts: 0, max_attempts: 3, payload: { to: "user@example.com" } },
+  { id: 102, type: "image-process", status: "FAILED", attempts: 2, max_attempts: 3, payload: { image_id: "img_9821" }, last_error: "Worker timeout" },
+  { id: 103, type: "report-generate", status: "RUNNING", attempts: 1, max_attempts: 3, payload: { report_id: "weekly" } },
 ];
 
-export default function App() {
-  const [jobs, setJobs] = useState(INITIAL_JOBS);
-  const [query, setQuery] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-  const [metrics, setMetrics] = useState({ cpu: "24.2", mem: "1.2GB" });
+type Job = {
+  id: number;
+  type: string;
+  status: "QUEUED" | "RUNNING" | "COMPLETED" | "FAILED" | string;
+  attempts: number;
+  max_attempts: number;
+  payload?: any;
+  last_error?: string | null;
+};
 
-  // Infrastructure Telemetry Effect
+// --- HELPER COMPONENTS ---
+
+function StatusBadge({ status }: { status: Job["status"] }) {
+  const colors: Record<string, string> = {
+    QUEUED: "#9ca3af",
+    RUNNING: "#3b82f6",
+    COMPLETED: "#10b981",
+    FAILED: "#ef4444",
+  };
+  const color = colors[status] || "#9ca3af";
+  
+  return (
+    <span className={status === 'RUNNING' ? 'pulse' : ''} 
+      style={{ 
+        backgroundColor: `${color}22`, 
+        color: color, 
+        border: `1px solid ${color}44`,
+        padding: '4px 10px',
+        borderRadius: '12px',
+        fontSize: '11px',
+        fontWeight: 700,
+        textTransform: 'uppercase',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px'
+      }}>
+      <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: color, boxShadow: `0 0 8px ${color}` }}></span>
+      {status}
+    </span>
+  );
+}
+
+function RetryDots({ attempts, max }: { attempts: number; max: number }) {
+  return (
+    <div style={{ display: "flex", gap: 6 }}>
+      {Array.from({ length: max }).map((_, i) => (
+        <div key={i} style={{
+          width: 8, height: 8, borderRadius: "50%",
+          background: i < attempts ? "#ef4444" : "transparent",
+          border: i < attempts ? "none" : "1px solid #374151",
+          boxShadow: i < attempts ? "0 0 8px #ef4444" : "none"
+        }} />
+      ))}
+    </div>
+  );
+}
+
+function PrettyJson({ value }: { value: any }) {
+  return (
+    <pre style={{
+      margin: 0, padding: 16, borderRadius: 12, background: "#06090f",
+      border: "1px solid #1f2937", color: "#60a5fa", fontSize: 12, overflow: "auto"
+    }}>
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
+
+// --- MAIN APP ---
+
+export default function App() {
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Job | null>(null);
+  const [query, setQuery] = useState("");
+  
+  // Submission State
+  const [isAdding, setIsAdding] = useState(false);
+  const [newType, setNewType] = useState("email-send");
+
+  async function fetchAllJobs() {
+    if (DEMO_MODE && jobs.length === 0) { setJobs(DEMO_JOBS); return; }
+    if (DEMO_MODE) return;
+    try { const res = await axios.get(`${API_URL}/jobs`); setJobs(res.data); } catch (e) { console.error(e); }
+  }
+
+  async function fetchJob(id: number) {
+    if (DEMO_MODE) { setSelected(jobs.find(j => j.id === id) || null); return; }
+    try { const res = await axios.get(`${API_URL}/jobs/${id}`); setSelected(res.data); } catch (e) { console.error(e); }
+  }
+
+  async function triggerNewJob() {
+    const payload = { source: "UI_Manual", priority: "high", timestamp: new Date().toISOString() };
+    
+    if (DEMO_MODE) {
+      const newJob: Job = {
+        id: Math.floor(Math.random() * 899) + 100,
+        type: newType,
+        status: "QUEUED",
+        attempts: 0,
+        max_attempts: 3,
+        payload
+      };
+      setJobs([newJob, ...jobs]);
+      setIsAdding(false);
+      return;
+    }
+    try { 
+      await axios.post(`${API_URL}/jobs`, { type: newType, payload }); 
+      fetchAllJobs(); 
+      setIsAdding(false);
+    } catch (e) { console.error(e); }
+  }
+
   useEffect(() => {
-    const t = setInterval(() => {
-      setMetrics({
-        cpu: (Math.random() * 10 + 20).toFixed(1),
-        mem: (Math.random() * 0.5 + 1.0).toFixed(1) + "GB"
-      });
-    }, 2000);
-    return () => clearInterval(t);
+    fetchAllJobs();
+    const id = setInterval(fetchAllJobs, 3000);
+    return () => clearInterval(id);
   }, []);
 
-  const dispatchTask = () => {
-    const newTask = {
-      id: Math.floor(Math.random() * 500),
-      type: "MANUAL_DISPATCH_TASK",
-      status: "QUEUED"
-    };
-    setJobs(prev => [newTask, ...prev]);
-    setIsAdding(false);
-  };
+  useEffect(() => {
+    if (selectedId != null) fetchJob(selectedId);
+  }, [selectedId]);
 
-  const filtered = jobs.filter(j => 
-    query === "" || j.type.toLowerCase().includes(query.toLowerCase()) || String(j.id).includes(query)
-  );
+  const counts = useMemo(() => ({
+    QUEUED: jobs.filter(j => j.status === "QUEUED").length,
+    RUNNING: jobs.filter(j => j.status === "RUNNING").length,
+    COMPLETED: jobs.filter(j => j.status === "COMPLETED").length,
+    FAILED: jobs.filter(j => j.status === "FAILED").length,
+  }), [jobs]);
+
+  const filtered = useMemo(() => {
+    return jobs.filter(j => {
+      const q = query.trim().toLowerCase();
+      return q.length === 0 ? true : (String(j.id).includes(q) || (j.type || "").toLowerCase().includes(q));
+    });
+  }, [jobs, query]);
 
   return (
-    <div style={{ 
-      backgroundColor: "#050505", 
-      color: "#00ff41", 
-      fontFamily: "'JetBrains Mono', monospace", 
-      minHeight: "100vh", 
-      padding: "30px",
-      letterSpacing: "0.5px"
-    }}>
+    <div style={{ backgroundColor: "#070b14", minHeight: "100vh", color: "#f3f4f6", fontFamily: "Inter, sans-serif" }}>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
-        .terminal-window { border: 1px solid #00ff41; padding: 20px; background: rgba(0, 255, 65, 0.02); margin-bottom: 20px; position: relative; }
-        .terminal-window::before { content: "SYS_MONITOR_v1.0"; position: absolute; top: -10px; left: 20px; background: #050505; padding: 0 10px; font-size: 10px; }
-        .blink { animation: blink-kf 1s infinite; }
-        @keyframes blink-kf { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-        th { text-align: left; border-bottom: 1px solid #00ff41; padding: 10px; font-size: 12px; }
-        td { padding: 12px 10px; font-size: 13px; border-bottom: 1px solid #00ff4111; }
-        input, select { background: transparent; border: 1px solid #00ff41; color: #00ff41; padding: 8px; font-family: inherit; outline: none; }
-        button { background: #00ff41; color: #050505; border: none; padding: 10px 20px; font-family: inherit; font-weight: bold; cursor: pointer; }
-        button:hover { background: #00cc33; }
+        .glow-card { background: rgba(17, 25, 40, 0.75); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 16px; transition: all 0.2s ease; }
+        .pulse { animation: pulse-kf 2s infinite; }
+        @keyframes pulse-kf { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        table tr:hover { background: rgba(255, 255, 255, 0.02); }
+        select:focus, input:focus { border-color: #3b82f6 !important; }
       `}</style>
 
-      {/* HEADER SECTION */}
-      <div className="terminal-window" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <h1 style={{ margin: 0, fontSize: "24px" }}>&gt; IRON_QUEUE_OS</h1>
-          <p style={{ margin: 0, fontSize: "12px", opacity: 0.8 }}>DISTRIBUTED_NODE_STATION // {DEMO_MODE ? "SANDBOX_ACTIVE" : "PROD_ACTIVE"}</p>
-        </div>
-        <div style={{ textAlign: 'right', fontSize: "14px" }}>
-          <div>CPU_USAGE: {metrics.cpu}%</div>
-          <div>MEM_ALLOC: {metrics.mem}</div>
-          <div>NET_STATUS: <span className="blink">ONLINE</span></div>
+      <div style={{ padding: "40px 24px", maxWidth: 1400, margin: "0 auto" }}>
+        
+        {/* HEADER */}
+        <header style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 32 }}>
+          <div>
+            <h1 style={{ fontSize: 32, fontWeight: 800, margin: 0, letterSpacing: "-1px" }}>IronQueue</h1>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+              <span className="pulse" style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: "#10b981", boxShadow: "0 0 10px #10b981" }}></span>
+              <p style={{ margin: 0, color: "#9ca3af", fontSize: 14 }}>System Live · Real-time Polling</p>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 12 }}>
+            <input 
+              className="glow-card" 
+              style={{ padding: "12px 20px", width: 260, color: "white", outline: "none", background: "rgba(15, 22, 36, 0.6)" }} 
+              placeholder="Search by ID or Type..." 
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <button 
+              onClick={() => setIsAdding(!isAdding)}
+              style={{ backgroundColor: isAdding ? "#374151" : "#3b82f6", color: "white", padding: "0 24px", borderRadius: "12px", border: "none", fontWeight: 600, cursor: "pointer", transition: "all 0.2s" }}
+            >
+              {isAdding ? "Cancel" : "Submit New Job"}
+            </button>
+          </div>
+        </header>
+
+        {/* INTERACTIVE SUBMISSION FORM */}
+        {isAdding && (
+          <div className="glow-card" style={{ marginBottom: 32, padding: 24, display: "flex", gap: 20, alignItems: "flex-end", border: "1px solid #3b82f644", background: "rgba(59, 130, 246, 0.05)" }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: 11, color: "#3b82f6", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Select Task Module</label>
+              <select 
+                value={newType} 
+                onChange={(e) => setNewType(e.target.value)}
+                style={{ width: "100%", background: "#0f172a", border: "1px solid #1f2937", color: "white", padding: "12px", borderRadius: "10px", outline: "none", cursor: "pointer" }}
+              >
+                <option value="email-send">email-send</option>
+                <option value="image-process">image-process</option>
+                <option value="report-generate">report-generate</option>
+                <option value="db-backup">db-backup</option>
+              </select>
+            </div>
+            <div style={{ flex: 2 }}>
+              <label style={{ fontSize: 11, color: "#9ca3af", fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 8 }}>Static Payload Configuration</label>
+              <div style={{ background: "#06090f", padding: "12px", borderRadius: "10px", border: "1px solid #1f2937", color: "#60a5fa", fontSize: 12, fontFamily: "monospace" }}>
+                {"{ \"source\": \"UI_Control\", \"priority\": \"critical\" }"}
+              </div>
+            </div>
+            <button 
+              onClick={triggerNewJob}
+              style={{ backgroundColor: "#10b981", color: "white", padding: "14px 32px", borderRadius: "10px", border: "none", fontWeight: 800, cursor: "pointer", boxShadow: "0 4px 14px 0 rgba(16, 185, 129, 0.39)" }}
+            >
+              PUSH TO WORKER
+            </button>
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 340px", gap: 24 }}>
+          
+          <main>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 24 }}>
+              {[
+                { label: "Queued", val: counts.QUEUED, color: "#9ca3af" },
+                { label: "Running", val: counts.RUNNING, color: "#3b82f6" },
+                { label: "Completed", val: counts.COMPLETED, color: "#10b981" },
+                { label: "Failed", val: counts.FAILED, color: "#ef4444" }
+              ].map(stat => (
+                <div key={stat.label} className="glow-card" style={{ padding: 20, borderLeft: `4px solid ${stat.color}` }}>
+                  <div style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>{stat.label}</div>
+                  <div style={{ fontSize: 32, fontWeight: 700, marginTop: 4 }}>{stat.val}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="glow-card" style={{ overflow: "hidden" }}>
+              <table width="100%" style={{ borderCollapse: "collapse", textAlign: "left" }}>
+                <thead style={{ background: "rgba(255,255,255,0.03)", color: "#9ca3af", fontSize: 12 }}>
+                  <tr>
+                    <th style={{ padding: 18 }}>JOB ID</th>
+                    <th>TYPE</th>
+                    <th>STATUS</th>
+                    <th>RETRIES</th>
+                    <th style={{ paddingRight: 18 }}>MAX</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: 40, color: "#9ca3af", textAlign: "center" }}>No records found in active cluster.</td></tr>
+                  ) : filtered.map(job => (
+                    <tr key={job.id} onClick={() => setSelectedId(job.id)} style={{ borderTop: "1px solid rgba(255,255,255,0.05)", cursor: "pointer" }}>
+                      <td style={{ padding: 18, fontWeight: 700 }}>#{job.id}</td>
+                      <td><code style={{ background: "#1e293b", padding: "3px 8px", borderRadius: 6, fontSize: 13 }}>{job.type}</code></td>
+                      <td><StatusBadge status={job.status} /></td>
+                      <td><RetryDots attempts={job.attempts} max={job.max_attempts} /></td>
+                      <td style={{ paddingRight: 18, color: "#9ca3af" }}>{job.max_attempts}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </main>
+
+          <aside className="glow-card" style={{ padding: 20, height: "fit-content" }}>
+            <h3 style={{ margin: "0 0 20px 0", fontSize: 16, fontWeight: 700 }}>Cluster Activity</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              {jobs.slice(0, 10).map(job => (
+                <div key={job.id} style={{ display: "flex", gap: 14 }}>
+                  <div style={{ 
+                    width: 32, height: 32, borderRadius: "10px", 
+                    backgroundColor: job.status === 'COMPLETED' ? "#10b98122" : job.status === 'FAILED' ? "#ef444422" : "#3b82f622",
+                    display: "flex", alignItems: "center", justifyContent: "center", color: job.status === 'COMPLETED' ? "#10b981" : job.status === 'FAILED' ? "#ef4444" : "#3b82f6"
+                  }}>
+                    {job.status === 'COMPLETED' ? '✓' : job.status === 'FAILED' ? '!' : '→'}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 13, fontWeight: 600 }}>Job #{job.id} {job.status.toLowerCase()}</div>
+                    <div style={{ fontSize: 11, color: "#9ca3af" }}>Type: {job.type}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
         </div>
       </div>
 
-      {/* ACTION BAR */}
-      <div style={{ display: 'flex', gap: '15px', marginBottom: '20px' }}>
-        <input 
-          style={{ flex: 1 }} 
-          placeholder="ENTER_FILTER_CRITERIA..." 
-          value={query} 
-          onChange={e => setQuery(e.target.value)} 
-        />
-        <button onClick={() => setIsAdding(!isAdding)}>
-          {isAdding ? "CANCEL_OP" : "DISPATCH_NEW_TASK"}
-        </button>
-      </div>
+      {/* DRAWER MODAL */}
+      {selectedId && (
+        <div onClick={() => setSelectedId(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", backdropFilter: "blur(6px)", display: "flex", justifyContent: "flex-end", zIndex: 100 }}>
+          <div onClick={e => e.stopPropagation()} style={{ width: 500, height: "100%", background: "#0f172a", borderLeft: "1px solid #1f2937", padding: 40, boxShadow: "-10px 0 30px rgba(0,0,0,0.5)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <h2 style={{ margin: 0 }}>System Trace #{selectedId}</h2>
+                <p style={{ color: "#9ca3af", margin: "4px 0 0 0" }}>Internal Metadata & Logs</p>
+              </div>
+              <button onClick={() => setSelectedId(null)} style={{ background: "none", border: "1px solid #334155", color: "white", padding: "8px 16px", borderRadius: 8, cursor: "pointer" }}>Close</button>
+            </div>
+            
+            <div style={{ marginTop: 32 }}><StatusBadge status={selected?.status || ""} /></div>
 
-      {/* NEW TASK FORM */}
-      {isAdding && (
-        <div className="terminal-window" style={{ borderStyle: 'dashed' }}>
-          <p style={{ margin: "0 0 15px 0" }}>// INITIALIZING NEW TASK SEQUENCE...</p>
-          <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
-            <span style={{ fontSize: "12px" }}>SELECT_MODULE:</span>
-            <select style={{ width: '250px' }}>
-              <option>KAFKA_STREAM_PROC</option>
-              <option>REDIS_FLUSH_NODE</option>
-              <option>WORKER_CLEANUP_DAEMON</option>
-            </select>
-            <button style={{ padding: '5px 15px' }} onClick={dispatchTask}>EXECUTE_PUSH</button>
+            <div style={{ marginTop: 32 }}>
+              <label style={{ color: "#9ca3af", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>JSON Data Payload</label>
+              <div style={{ marginTop: 12 }}><PrettyJson value={selected?.payload ?? {}} /></div>
+            </div>
+
+            {selected?.last_error && (
+              <div style={{ marginTop: 24 }}>
+                <label style={{ color: "#ef4444", fontSize: 11, fontWeight: 700, textTransform: "uppercase" }}>Traceback Error</label>
+                <div style={{ marginTop: 12, padding: 16, borderRadius: 12, background: "#7f1d1d22", border: "1px solid #ef444444", color: "#fca5a5", fontSize: 12 }}>{selected.last_error}</div>
+              </div>
+            )}
           </div>
         </div>
       )}
-
-      {/* MAIN DATA GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '25px' }}>
-        <div className="terminal-window" style={{ padding: 0 }}>
-          <table>
-            <thead>
-              <tr>
-                <th>HEX_ADDRESS</th>
-                <th>PROCESS_MODULE</th>
-                <th>LOG_STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map(j => (
-                <tr key={j.id}>
-                  <td style={{ color: "#00ff41", fontWeight: "bold" }}>0x{j.id.toString(16).toUpperCase()}</td>
-                  <td>{j.type}</td>
-                  <td style={{ color: j.status === "FAILED" ? "#ff3e3e" : j.status === "RUNNING" ? "#3b82f6" : "#00ff41" }}>
-                    [{j.status}]
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* SYSTEM LOG SIDEBAR */}
-        <div className="terminal-window">
-          <p style={{ margin: "0 0 15px 0", fontSize: "12px", borderBottom: "1px solid #00ff41", paddingBottom: "5px" }}>SYSTEM_DAEMON_LOG</p>
-          <div style={{ fontSize: "11px", lineHeight: "1.8", color: "rgba(0, 255, 65, 0.7)" }}>
-            [08:42:01] Initializing cluster...<br/>
-            [08:42:05] Redis handshake successful.<br/>
-            [08:43:10] WorkerPool-01 established.<br/>
-            [08:43:12] Heartbeat check: OK.<br/>
-            [08:44:00] Awaiting instruction...<br/>
-            <span style={{ color: "#00ff41" }}>&gt; _ <span className="blink"></span></span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
